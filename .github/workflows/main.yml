@@ -48,7 +48,7 @@ jobs:
         with:
           image-ref: demo-app:latest
           format: cyclonedx
-          output: sbom.json
+          output: sbom.xlsx
           exit-code: 0
 
       - name: Upload SBOM
