@@ -1,30 +1,30 @@
 name: Demo CI Pipeline
-
+ 
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-
+ 
 permissions:
   contents: read
   security-events: write
-
+ 
 jobs:
   demo:
     runs-on: ubuntu-latest
-
+ 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
+ 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
-
+ 
       - name: Build Docker Image
         run: |
           docker build -t demo-app:latest .
-
+ 
       - name: Run Trivy Vulnerability Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -35,12 +35,12 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: 0
           ignore-unfixed: true
-
+ 
       - name: Upload Trivy Scan Results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
-
+ 
       - name: Generate SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -48,20 +48,20 @@ jobs:
           format: cyclonedx
           output: sbom.cdx.json
           exit-code: 0
-
+ 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+ 
       - name: Install Dependencies
         run: |
           pip install pandas openpyxl
-
+ 
       - name: Convert SBOM to Excel
         run: |
           python convert_sbom.py
-
+ 
       - name: Upload SBOM Excel
         uses: actions/upload-artifact@v4
         with:
@@ -69,8 +69,6 @@ jobs:
           path: sbom.xlsx
           if-no-files-found: error
           retention-days: 30
-
-      - name: Finish Pipeline
-        run: echo "Pipeline completed successfully"
+ 
       - name: Finish Pipeline
         run: echo "Pipeline completed successfully"
