@@ -18,17 +18,20 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Secret Scan
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.Github_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build Docker Image
       - name: Build Docker Image
         run: |
           docker build -t demo-app:latest .
 
+      # Trivy Vulnerability Scan
       - name: Run Trivy Vulnerability Scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: demo-app:latest
           scan-type: image
@@ -38,26 +41,88 @@ jobs:
           exit-code: 0
           ignore-unfixed: true
 
+      # Upload SARIF to Security Tab
       - name: Upload Trivy Scan Results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
 
+      # Generate SBOM JSON
       - name: Generate SBOM
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: demo-app:latest
           format: cyclonedx
-          output: sbom.xlsx
-          exit-code: 0
+          output: sbom.json
 
-      - name: Upload SBOM
+      # Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Install Dependencies
+      - name: Install Python Libraries
+        run: |
+          pip install pandas openpyxl
+
+      # Convert SBOM JSON to Excel
+      - name: Convert SBOM JSON to Excel
+        run: |
+          python << 'EOF'
+          import json
+          import pandas as pd
+
+          with open("sbom.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          rows = []
+
+          for comp in data.get("components", []):
+              rows.append({
+                  "Name": comp.get("name", ""),
+                  "Version": comp.get("version", ""),
+                  "Type": comp.get("type", ""),
+                  "PURL": comp.get("purl", ""),
+                  "Publisher": comp.get("publisher", "")
+              })
+
+          if rows:
+              df = pd.DataFrame(rows)
+          else:
+              df = pd.DataFrame(columns=[
+                  "Name",
+                  "Version",
+                  "Type",
+                  "PURL",
+                  "Publisher"
+              ])
+
+          df.to_excel("sbom.xlsx", index=False)
+
+          print(f"Generated Excel with {len(df)} components")
+          EOF
+
+      # Upload JSON SBOM
+      - name: Upload SBOM JSON
         uses: actions/upload-artifact@v4
         with:
-          name: docker-image-sbom
+          name: sbom-json
+          path: sbom.json
+
+      # Upload Excel SBOM
+      - name: Upload SBOM Excel
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-excel
           path: sbom.xlsx
-          if-no-files-found: error
-          retention-days: 30
+
+      # Upload SARIF Report
+      - name: Upload SARIF Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
 
       - name: Finish Pipeline
         run: echo "Pipeline completed successfully"
