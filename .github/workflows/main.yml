@@ -20,8 +20,6 @@ jobs:
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker Image
         run: |
@@ -48,78 +46,31 @@ jobs:
         with:
           image-ref: demo-app:latest
           format: cyclonedx
-          output: sbom.json
+          output: sbom.cdx.json
           exit-code: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install Python Libraries
+      - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install numpy pandas openpyxl
+          pip install pandas openpyxl
 
-      - name: Verify Python Packages
+      - name: Convert SBOM to Excel
         run: |
-          python -c "import numpy; print('Numpy OK')"
-          python -c "import pandas; print('Pandas OK')"
-          python -c "import openpyxl; print('Openpyxl OK')"
+          python convert_sbom.py
 
-      - name: Convert SBOM JSON to Excel
-        run: |
-          python << 'EOF'
-          import json
-          import pandas as pd
-
-          with open("sbom.json", "r", encoding="utf-8") as f:
-              data = json.load(f)
-
-          rows = []
-
-          for comp in data.get("components", []):
-              rows.append({
-                  "Name": comp.get("name", ""),
-                  "Version": comp.get("version", ""),
-                  "Type": comp.get("type", ""),
-                  "PURL": comp.get("purl", ""),
-                  "Publisher": comp.get("publisher", "")
-              })
-
-          df = pd.DataFrame(rows)
-
-          if df.empty:
-              df = pd.DataFrame([{
-                  "Name": "No Components Found",
-                  "Version": "",
-                  "Type": "",
-                  "PURL": "",
-                  "Publisher": ""
-              }])
-
-          df.to_excel("sbom.xlsx", index=False)
-
-          print("Excel report generated successfully")
-          EOF
-
-      - name: Upload JSON SBOM
+      - name: Upload SBOM Excel
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-json
-          path: sbom.json
-
-      - name: Upload Excel SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-excel
+          name: docker-image-sbom
           path: sbom.xlsx
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Upload SARIF Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-sarif
-          path: trivy-results.sarif
-
+      - name: Finish Pipeline
+        run: echo "Pipeline completed successfully"
       - name: Finish Pipeline
         run: echo "Pipeline completed successfully"
